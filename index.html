@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Snake Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #1a1a2e;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameCanvas {
+            border: 4px solid #16213e;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.2);
+        }
+        #gameOverlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #e94560;
+            font-size: 24px;
+            display: none;
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #0f3460;
+            color: #e94560;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #startButton:hover {
+            background-color: #e94560;
+            color: #0f3460;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div id="gameOverlay">
+        <h2 id="gameStatus"></h2>
+        <p id="finalScore"></p>
+        <button id="startButton">Start Game</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('gameOverlay');
+        const gameStatus = document.getElementById('gameStatus');
+        const finalScore = document.getElementById('finalScore');
+        const startButton = document.getElementById('startButton');
+
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+
+        let snake = [];
+        let food = {};
+        let dx = 1;
+        let dy = 0;
+        let score = 0;
+        let gameRunning = false;
+        let gameSpeed = 100; // Faster base speed for smoother animation
+
+        const colors = {
+            background: '#0f3460',
+            snake: {
+                body: '#e94560',
+                border: '#16213e',
+                eye: '#ffffff',
+                pupil: '#000000'
+            },
+            food: '#ffa500',
+            text: '#e94560'
+        };
+
+        function initGame() {
+            snake = Array.from({length: 5}, (_, i) => ({x: 10 - i, y: 10, angle: 0}));
+            generateFood();
+            dx = 1;
+            dy = 0;
+            score = 0;
+            gameSpeed = 100;
+            gameRunning = true;
+            overlay.style.display = 'none';
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', changeDirection);
+        startButton.addEventListener('click', initGame);
+
+        function changeDirection(event) {
+            const LEFT_KEY = 37;
+            const RIGHT_KEY = 39;
+            const UP_KEY = 38;
+            const DOWN_KEY = 40;
+
+            if (!gameRunning) return;
+
+            const keyPressed = event.keyCode;
+            const goingUp = dy === -1;
+            const goingDown = dy === 1;
+            const goingRight = dx === 1;
+            const goingLeft = dx === -1;
+
+            if (keyPressed === LEFT_KEY && !goingRight) {
+                dx = -1;
+                dy = 0;
+            }
+            if (keyPressed === UP_KEY && !goingDown) {
+                dx = 0;
+                dy = -1;
+            }
+            if (keyPressed === RIGHT_KEY && !goingLeft) {
+                dx = 1;
+                dy = 0;
+            }
+            if (keyPressed === DOWN_KEY && !goingUp) {
+                dx = 0;
+                dy = 1;
+            }
+        }
+
+        let lastTime = 0;
+        function gameLoop(currentTime) {
+            if (!gameRunning) return;
+
+            const deltaTime = currentTime - lastTime;
+            if (deltaTime >= gameSpeed) {
+                lastTime = currentTime;
+
+                clearCanvas();
+                moveSnake();
+                drawSnake();
+                drawFood();
+                drawScore();
+
+                if (checkCollision()) {
+                    endGame();
+                    return;
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = colors.background;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function moveSnake() {
+            const head = {
+                x: (snake[0].x + dx + tileCount) % tileCount,
+                y: (snake[0].y + dy + tileCount) % tileCount,
+                angle: Math.atan2(dy, dx)
+            };
+
+            snake.unshift(head);
+
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                generateFood();
+                gameSpeed = Math.max(50, gameSpeed - 2);
+            } else {
+                snake.pop();
+            }
+
+            // Update angles for body segments
+            for (let i = 1; i < snake.length; i++) {
+                snake[i].angle = Math.atan2(
+                    snake[i-1].y - snake[i].y,
+                    snake[i-1].x - snake[i].x
+                );
+            }
+        }
+
+        function drawSnake() {
+            snake.forEach((segment, index) => {
+                const gradient = ctx.createRadialGradient(
+                    (segment.x + 0.5) * gridSize, (segment.y + 0.5) * gridSize, 0,
+                    (segment.x + 0.5) * gridSize, (segment.y + 0.5) * gridSize, gridSize / 2
+                );
+                gradient.addColorStop(0, colors.snake.body);
+                gradient.addColorStop(1, colors.snake.border);
+
+                ctx.save();
+                ctx.translate((segment.x + 0.5) * gridSize, (segment.y + 0.5) * gridSize);
+                ctx.rotate(segment.angle);
+
+                ctx.beginPath();
+                ctx.ellipse(0, 0, gridSize / 2, gridSize / 3, 0, 0, 2 * Math.PI);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.strokeStyle = colors.snake.border;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                if (index === 0) {
+                    // Draw eyes
+                    ctx.fillStyle = colors.snake.eye;
+                    ctx.beginPath();
+                    ctx.ellipse(gridSize / 4, -gridSize / 6, 3, 2, 0, 0, 2 * Math.PI);
+                    ctx.ellipse(gridSize / 4, gridSize / 6, 3, 2, 0, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                    ctx.fillStyle = colors.snake.pupil;
+                    ctx.beginPath();
+                    ctx.ellipse(gridSize / 4 + 1, -gridSize / 6, 1, 1, 0, 0, 2 * Math.PI);
+                    ctx.ellipse(gridSize / 4 + 1, gridSize / 6, 1, 1, 0, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            });
+        }
+
+        function drawFood() {
+            const gradient = ctx.createRadialGradient(
+                (food.x + 0.5) * gridSize, (food.y + 0.5) * gridSize, 0,
+                (food.x + 0.5) * gridSize, (food.y + 0.5) * gridSize, gridSize / 2
+            );
+            gradient.addColorStop(0, colors.food);
+            gradient.addColorStop(1, '#ff4500');
+
+            ctx.beginPath();
+            ctx.arc((food.x + 0.5) * gridSize, (food.y + 0.5) * gridSize, gridSize / 2 - 2, 0, 2 * Math.PI);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.strokeStyle = '#ff6347';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Add a shine effect
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.ellipse((food.x + 0.3) * gridSize, (food.y + 0.3) * gridSize, 3, 2, Math.PI / 4, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function generateFood() {
+            food.x = Math.floor(Math.random() * tileCount);
+            food.y = Math.floor(Math.random() * tileCount);
+        }
+
+        function drawScore() {
+            ctx.fillStyle = colors.text;
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('Score: ' + score, 10, 30);
+        }
+
+        function checkCollision() {
+            // Check collision with self
+            for (let i = 1; i < snake.length; i++) {
+                if (snake[i].x === snake[0].x && snake[i].y === snake[0].y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function endGame() {
+            gameRunning = false;
+            gameStatus.textContent = 'Game Over!';
+            finalScore.textContent = `Final Score: ${score}`;
+            overlay.style.display = 'block';
+        }
+
+        // Initial setup
+        clearCanvas();
+        overlay.style.display = 'block';
+        gameStatus.textContent = 'Snake Game';
+        finalScore.textContent = 'Press Start to play!';
+    </script>
+</body>
+</html>
